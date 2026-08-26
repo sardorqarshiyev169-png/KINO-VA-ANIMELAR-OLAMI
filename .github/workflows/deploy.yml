@@ -1,0 +1,36 @@
+name: Deploy Bot to Server
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          ADMIN_ID: ${{ secrets.ADMIN_ID }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          envs: BOT_TOKEN,ADMIN_ID
+          script: |
+            # DIQQAT: Serverdagi loyiha turgan papkaga yo'lni o'zgartiring (masalan /root/bot)
+            cd /root/KINO-VA-ANIMELAR-OLAMI || exit 1
+            
+            # Yangi kodlarni GitHubdan tortib olish
+            git pull origin main
+            
+            # .env faylini avtomatik yaratish
+            echo "BOT_TOKEN=$BOT_TOKEN" > .env
+            echo "ADMIN_ID=$ADMIN_ID" >> .env
+            
+            # Docker yordamida botni yangilash va ishga tushirish
+            docker compose up -d --build

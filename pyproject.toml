@@ -1,0 +1,9 @@
+[project]
+name = "kino-catalog-bot"
+version = "0.1.0"
+description = "Telegram movie, TV series, and anime catalog bot"
+requires-python = ">=3.11"
+dependencies = [
+    "aiogram>=3.30.0",
+    "aiosqlite>=0.22.1",
+]
