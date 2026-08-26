@@ -15,16 +15,16 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           ADMIN_ID: ${{ secrets.ADMIN_ID }}
-          PROJECT_PATH: ${{ secrets.PROJECT_PATH }}
+          PATH_SECRET: ${{ secrets.PATH }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          envs: BOT_TOKEN,ADMIN_ID,PROJECT_PATH
+          envs: BOT_TOKEN,ADMIN_ID,PATH_SECRET
           script: |
             # Loyiha papkasiga kirish
-            cd $PROJECT_PATH || exit 1
+            cd $PATH_SECRET || exit 1
             
             # Yangi kodlarni GitHubdan tortib olish
             git pull origin main
