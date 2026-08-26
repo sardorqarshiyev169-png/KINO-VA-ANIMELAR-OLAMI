@@ -15,15 +15,16 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           ADMIN_ID: ${{ secrets.ADMIN_ID }}
+          PROJECT_PATH: ${{ secrets.PROJECT_PATH }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          envs: BOT_TOKEN,ADMIN_ID
+          envs: BOT_TOKEN,ADMIN_ID,PROJECT_PATH
           script: |
-            # DIQQAT: Serverdagi loyiha turgan papkaga yo'lni o'zgartiring (masalan /root/bot)
-            cd /root/KINO-VA-ANIMELAR-OLAMI || exit 1
+            # Loyiha papkasiga kirish
+            cd $PROJECT_PATH || exit 1
             
             # Yangi kodlarni GitHubdan tortib olish
             git pull origin main
