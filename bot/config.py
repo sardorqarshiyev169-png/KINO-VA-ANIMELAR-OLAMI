@@ -24,6 +24,8 @@ def _admin_id() -> int:
 
 
 def _normalise_channel_id(value: str) -> str:
+    if not value:
+        return ""
     if value.startswith("https://t.me/"):
         username = value.removeprefix("https://t.me/").split("/", 1)[0]
         return f"@{username}" if not username.startswith("@") else username
@@ -46,8 +48,8 @@ class Settings:
         )
         database_path.parent.mkdir(parents=True, exist_ok=True)
 
-        channel_id = _required("REQUIRED_CHANNEL_ID")
-        channel_url = _required("REQUIRED_CHANNEL_URL")
+        channel_id = os.getenv("REQUIRED_CHANNEL_ID", "").strip()
+        channel_url = os.getenv("REQUIRED_CHANNEL_URL", "").strip()
         return cls(
             bot_token=_required("BOT_TOKEN"),
             admin_id=_admin_id(),
