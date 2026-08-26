@@ -23,11 +23,19 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           envs: BOT_TOKEN,ADMIN_ID,PATH_SECRET
           script: |
-            # Loyiha papkasiga kirish
+            # Papkani yaratish (agar yo'q bo'lsa) va ichiga kirish
+            mkdir -p $PATH_SECRET
             cd $PATH_SECRET || exit 1
             
-            # Yangi kodlarni GitHubdan tortib olish
-            git pull origin main
+            # Agar bu yerda oldin git o'rnatilmagan bo'lsa, uni sozlash
+            if [ ! -d ".git" ]; then
+              git init
+              git remote add origin https://github.com/sardorqarshiyev169-png/KINO-VA-ANIMELAR-OLAMI.git
+            fi
+            
+            # Eski fayllarni e'tiborga olmasdan, Githubdagi 100% yangi kodni tortib olish
+            git fetch --all
+            git reset --hard origin/main
             
             # .env faylini avtomatik yaratish
             echo "BOT_TOKEN=$BOT_TOKEN" > .env
