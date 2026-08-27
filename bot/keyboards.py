@@ -130,7 +130,111 @@ def content_detail_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def content_detail_with_delete_keyboard(
+    content_type: str,
+    content_id: int,
+    has_media: bool,
+    is_admin: bool = False,
+) -> InlineKeyboardMarkup:
+    """Kino/anime uchun detail keyboard — admin bo'lsa o'chirish tugmasi ham chiqadi."""
+    rows: list[list[InlineKeyboardButton]] = []
+    if has_media:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="▶️ Ko'rish",
+                    callback_data=f"send_content:{content_type}:{content_id}",
+                )
+            ]
+        )
+    if is_admin:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🗑 O'chirish",
+                    callback_data=f"admin:delete_content:{content_id}:{content_type}",
+                )
+            ]
+        )
+    rows.extend(
+        [
+            [InlineKeyboardButton(text="‹ Ro'yxatga qaytish", callback_data=f"category:{content_type}:0")],
+            [InlineKeyboardButton(text="🏠 Asosiy menyu", callback_data="home")],
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def episode_number_keyboard(
+    episodes: list[tuple[int, int, str]],
+    content_id: int,
+    content_type: str = "series",
+    is_admin: bool = False,
+) -> InlineKeyboardMarkup:
+    """
+    Qismlarni raqamlar (1, 2, 3...) ko'rinishida chiqaradi.
+    Har qatorda 5 ta raqam tugmasi joylashadi.
+    Admin bo'lsa, pastda qismni o'chirish tugmasi chiqadi.
+    """
+    COLS = 5
+    number_buttons = [
+        InlineKeyboardButton(
+            text=str(number),
+            callback_data=f"episode:{episode_id}",
+        )
+        for episode_id, number, _title in episodes
+    ]
+
+    rows: list[list[InlineKeyboardButton]] = []
+    for i in range(0, len(number_buttons), COLS):
+        rows.append(number_buttons[i : i + COLS])
+
+    if is_admin and episodes:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🗑 Qismni o'chirish",
+                    callback_data=f"admin:delete_episode_menu:{content_id}:{content_type}",
+                ),
+                InlineKeyboardButton(
+                    text="🗑 Barchasini o'chirish",
+                    callback_data=f"admin:delete_content:{content_id}:{content_type}",
+                ),
+            ]
+        )
+
+    rows.extend(
+        [
+            [InlineKeyboardButton(text="‹ Ro'yxatga qaytish", callback_data=f"category:{content_type}:0")],
+            [InlineKeyboardButton(text="🏠 Asosiy menyu", callback_data="home")],
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def episode_delete_menu(
+    episodes: list[tuple[int, int, str]],
+    content_id: int,
+    content_type: str,
+) -> InlineKeyboardMarkup:
+    """O'chirish uchun qismlar ro'yxati — har biri alohida qator."""
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"🗑 {number}-qism: {title}",
+                callback_data=f"admin:delete_episode:{episode_id}:{content_id}:{content_type}",
+            )
+        ]
+        for episode_id, number, title in episodes
+    ]
+    rows.append(
+        [InlineKeyboardButton(text="‹ Bekor qilish", callback_data=f"content:{content_type}:{content_id}")]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def episode_keyboard(episodes: list[tuple[int, int, str]], content_type: str = "series") -> InlineKeyboardMarkup:
+    """Eski funksiya — to'g'ridan-to'g'ri nomlar ko'rinishida (backward compatibility)."""
     rows = [
         [
             InlineKeyboardButton(

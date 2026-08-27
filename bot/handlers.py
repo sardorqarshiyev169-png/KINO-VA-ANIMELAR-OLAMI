@@ -37,8 +37,11 @@ from bot.keyboards import (
     SERIES_BUTTON,
     admin_menu,
     content_detail_keyboard,
+    content_detail_with_delete_keyboard,
     channel_delete_menu,
     episode_keyboard,
+    episode_number_keyboard,
+    episode_delete_menu,
     mandatory_channels_menu,
     pagination_keyboard,
     episode_content_type_picker,
@@ -226,7 +229,8 @@ def register_user_handlers(
         if not content:
             await callback.message.answer("Bu ma'lumot endi mavjud emas.")
             return
-        await show_content(callback.message, database, content)
+        admin = is_admin(callback.from_user.id, settings)
+        await show_content(callback.message, database, content, admin=admin)
 
     @router.callback_query(F.data.startswith("send_content:"))
     async def send_content_callback(callback: CallbackQuery, bot: Bot) -> None:
@@ -267,6 +271,82 @@ def register_user_handlers(
             episode.media_type,
             f"📺 <b>{episode.title}</b>\n{episode.episode_number}-qism",
         )
+
+    # ---- Admin: qismni o'chirish menyusi ----
+    @router.callback_query(F.data.startswith("admin:delete_episode_menu:"))
+    async def admin_delete_episode_menu(callback: CallbackQuery) -> None:
+        if not is_admin(callback.from_user.id, settings):
+            await callback.answer("Ruxsat yo'q.", show_alert=True)
+            return
+        await safe_answer(callback)
+        if not callback.message:
+            return
+        parts = callback.data.split(":")
+        content_id = int(parts[2])
+        content_type = parts[3]
+        episodes = await database.list_episodes(content_id)
+        if not episodes:
+            await callback.message.answer("Bu kontentda qismlar yo'q.")
+            return
+        await callback.message.edit_text(
+            "🗑 O'chirmoqchi bo'lgan qismni tanlang:",
+            reply_markup=episode_delete_menu(
+                [(ep.id, ep.episode_number, ep.title) for ep in episodes],
+                content_id=content_id,
+                content_type=content_type,
+            ),
+        )
+
+    # ---- Admin: bitta qismni o'chirish ----
+    @router.callback_query(F.data.startswith("admin:delete_episode:"))
+    async def admin_delete_episode(callback: CallbackQuery) -> None:
+        if not is_admin(callback.from_user.id, settings):
+            await callback.answer("Ruxsat yo'q.", show_alert=True)
+            return
+        await safe_answer(callback)
+        if not callback.message:
+            return
+        # format: admin:delete_episode:{episode_id}:{content_id}:{content_type}
+        parts = callback.data.split(":")
+        episode_id = int(parts[2])
+        content_id = int(parts[3])
+        content_type = parts[4]
+        deleted = await database.delete_episode(episode_id)
+        if deleted:
+            content = await database.get_content(content_id)
+            if content:
+                await show_content(callback.message, database, content, admin=True)
+                await callback.answer("✅ Qism o'chirildi.", show_alert=False)
+            else:
+                await callback.message.edit_text("✅ Qism o'chirildi.")
+        else:
+            await callback.answer("⚠️ Qism topilmadi.", show_alert=True)
+
+    # ---- Admin: butun kontent (kino/serial/anime) ni o'chirish ----
+    @router.callback_query(F.data.startswith("admin:delete_content:"))
+    async def admin_delete_content(callback: CallbackQuery) -> None:
+        if not is_admin(callback.from_user.id, settings):
+            await callback.answer("Ruxsat yo'q.", show_alert=True)
+            return
+        await safe_answer(callback)
+        if not callback.message:
+            return
+        # format: admin:delete_content:{content_id}:{content_type}
+        parts = callback.data.split(":")
+        content_id = int(parts[2])
+        content_type = parts[3]
+        deleted = await database.delete_content(content_id)
+        label = {"movie": "Kino", "series": "Serial", "anime": "Anime"}.get(content_type, "Kontent")
+        if deleted:
+            await callback.message.edit_text(
+                f"✅ {label} muvaffaqiyatli o'chirildi.",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text=f"‹ {label}lar ro'yxati", callback_data=f"category:{content_type}:0")],
+                    [InlineKeyboardButton(text="🏠 Asosiy menyu", callback_data="home")],
+                ]),
+            )
+        else:
+            await callback.answer("⚠️ Kontent topilmadi.", show_alert=True)
 
     @router.message(F.text == SEARCH_BUTTON)
     async def search_start(message: Message, bot: Bot, state: FSMContext) -> None:
@@ -350,7 +430,10 @@ async def edit_category(
 
 
 async def show_content(
-    message: Message, database: Database, content: CatalogItem
+    message: Message,
+    database: Database,
+    content: CatalogItem,
+    admin: bool = False,
 ) -> None:
     details = [f"🎞 <b>{escape_html(content.title)}</b>"]
     if content.year:
@@ -360,27 +443,32 @@ async def show_content(
     if content.description:
         details.append(f"\n{escape_html(content.description)}")
 
-    is_series_like = content.content_type == "series" or (content.content_type == "anime" and not content.file_id)
+    is_series_like = content.content_type == "series" or (
+        content.content_type == "anime" and not content.file_id
+    )
     if is_series_like:
         episodes = await database.list_episodes(content.id)
         if not episodes:
             details.append("\n\nQismlar tez orada qo'shiladi.")
         else:
-            details.append(f"\n\n📺 Qismlar: {len(episodes)}")
+            details.append(f"\n\n📺 Jami qismlar: <b>{len(episodes)}</b>\nQism raqamini bosing:")
         await message.edit_text(
             "\n".join(details),
-            reply_markup=episode_keyboard(
+            reply_markup=episode_number_keyboard(
                 [(episode.id, episode.episode_number, episode.title) for episode in episodes],
+                content_id=content.id,
                 content_type=content.content_type,
+                is_admin=admin,
             ),
         )
     else:
         await message.edit_text(
             "\n".join(details),
-            reply_markup=content_detail_keyboard(
+            reply_markup=content_detail_with_delete_keyboard(
                 content.content_type,
                 content.id,
                 bool(content.file_id and content.media_type),
+                is_admin=admin,
             ),
         )
 

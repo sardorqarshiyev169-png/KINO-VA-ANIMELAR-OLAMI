@@ -265,6 +265,21 @@ class Database:
         row = await cursor.fetchone()
         return self._episode_from_row(row) if row else None
 
+    async def delete_episode(self, episode_id: int) -> bool:
+        cursor = await self._db().execute(
+            "DELETE FROM episodes WHERE id = ?", (episode_id,)
+        )
+        await self._db().commit()
+        return cursor.rowcount > 0
+
+    async def delete_content(self, content_id: int) -> bool:
+        """Kontentni (va unga tegishli barcha qismlarni) o'chiradi."""
+        cursor = await self._db().execute(
+            "DELETE FROM contents WHERE id = ?", (content_id,)
+        )
+        await self._db().commit()
+        return cursor.rowcount > 0
+
     async def search(self, query: str, limit: int = 12) -> list[dict[str, Any]]:
         pattern = f"%{query}%"
         cursor = await self._db().execute(
