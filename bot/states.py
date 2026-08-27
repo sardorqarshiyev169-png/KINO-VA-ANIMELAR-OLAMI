@@ -11,12 +11,9 @@ class ContentForm(StatesGroup):
 
 
 class EpisodeForm(StatesGroup):
-    choose_series = State()
-    episode_number = State()
-    title = State()
-    description = State()
-    file_id = State()
-    media_type = State()
+    file = State()          # Admin video/document yuboradi
+    choose_series = State() # Qaysi serial/animega tegishli?
+    episode_number = State() # Qism raqami
 
 
 class SearchForm(StatesGroup):

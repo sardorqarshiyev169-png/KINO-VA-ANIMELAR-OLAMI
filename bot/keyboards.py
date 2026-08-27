@@ -273,6 +273,25 @@ def series_picker(items: list[tuple[int, str]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def series_and_anime_picker(items: list[tuple[int, str, str]]) -> InlineKeyboardMarkup:
+    """
+    Serial va animeni birga ko'rsatadi.
+    items: [(id, title, content_type), ...]
+    """
+    emoji = {"series": "📺", "anime": "🍥"}
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"{emoji.get(ctype, '🎬')} {title}",
+                callback_data=f"admin:episode_series:{series_id}",
+            )
+        ]
+        for series_id, title, ctype in items
+    ]
+    rows.append([InlineKeyboardButton(text=CANCEL_BUTTON, callback_data="admin:cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def channel_delete_menu(items: list[tuple[int, str]]) -> InlineKeyboardMarkup:
     rows = [
         [

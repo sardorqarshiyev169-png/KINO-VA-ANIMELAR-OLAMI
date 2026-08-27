@@ -46,6 +46,7 @@ from bot.keyboards import (
     pagination_keyboard,
     episode_content_type_picker,
     series_picker,
+    series_and_anime_picker,
     subscription_menu,
     user_menu,
 )
@@ -795,41 +796,64 @@ def register_admin_handlers(
             reply_markup=admin_menu(),
         )
 
+    # ===== QISM QO'SHISH — YANGI SODDALASHTIRILGAN OQIM =====
+    # Qadam 1: Admin "➕ Qism qo'shish" tugmasini bosadi
     @router.message(F.text == ADD_EPISODE_BUTTON)
     async def start_episode_form(message: Message, state: FSMContext) -> None:
         if not is_admin(message.from_user.id, settings):
             return
         await state.clear()
+        await state.set_state(EpisodeForm.file)
         await message.answer(
-            "Qaysi bo'limga qism qo'shasiz?",
-            reply_markup=episode_content_type_picker(),
+            "📹 <b>Qism qo'shish</b>\n\n"
+            "Videoni yuboring yoki boshqa kanaldan forward qiling.",
+            reply_markup=cancel_keyboard(),
         )
 
-    @router.callback_query(F.data.startswith("admin:ep_type:"))
-    async def choose_episode_content_type(callback: CallbackQuery, state: FSMContext) -> None:
-        if not is_admin(callback.from_user.id, settings):
+    # Qadam 2: Admin video/document yuboradi — file_id va media_type avtomatik olinadi
+    @router.message(EpisodeForm.file)
+    async def episode_receive_file(message: Message, state: FSMContext) -> None:
+        if not is_admin(message.from_user.id, settings):
             return
-        await safe_answer(callback)
-        content_type = callback.data.split(":")[-1]
-        
-        series = await database.list_admin_contents(content_type)
-        
-        if not series:
-            type_uz = "serial" if content_type == "series" else "anime"
-            if callback.message:
-                await callback.message.edit_text(
-                    f"Qism qo'shishdan oldin kamida bitta {type_uz} qo'shing."
-                )
+        if message.video:
+            file_id = message.video.file_id
+            media_type = "video"
+        elif message.document:
+            file_id = message.document.file_id
+            media_type = "document"
+        elif message.audio:
+            file_id = message.audio.file_id
+            media_type = "audio"
+        else:
+            await message.answer(
+                "⚠️ Video yoki fayl yuboring (yoki boshqa kanaldan forward qiling)."
+            )
+            return
+
+        await state.update_data(file_id=file_id, media_type=media_type)
+
+        # Serial va animeni birga ko'rsatish
+        all_contents = await database.list_all_series_and_animes()
+        if not all_contents:
+            await state.clear()
+            await message.answer(
+                "⚠️ Hali hech qanday serial yoki anime qo'shilmagan.\n"
+                "Avval serial yoki anime nomini qo'shing.",
+                reply_markup=admin_menu(),
+            )
             return
 
         await state.set_state(EpisodeForm.choose_series)
-        if callback.message:
-            await callback.message.edit_text(
-                "Bu qism tegishli bo'lgan nomni tanlang:",
-                reply_markup=series_picker([(item.id, item.title) for item in series]),
-            )
+        await message.answer(
+            "📺 <b>Qaysi serial yoki animega tegishli?</b>\n"
+            "Ro'yxatdan birini tanlang:",
+            reply_markup=series_and_anime_picker(
+                [(item.id, item.title, item.content_type) for item in all_contents]
+            ),
+        )
 
-    @router.callback_query(F.data.startswith("admin:episode_series:"))
+    # Qadam 3: Serial/anime tanlanadi
+    @router.callback_query(F.data.startswith("admin:episode_series:"), EpisodeForm.choose_series)
     async def choose_episode_series(callback: CallbackQuery, state: FSMContext) -> None:
         if not is_admin(callback.from_user.id, settings):
             return
@@ -840,17 +864,33 @@ def register_admin_handlers(
             if callback.message:
                 await callback.message.answer("Bu serial yoki anime endi mavjud emas.")
             return
-        await state.update_data(series_id=series_id, series_title=series.title)
+
+        # Mavjud qism raqamlarini ko'rsatish
+        existing = await database.list_episodes(series_id)
+        existing_nums = [ep.episode_number for ep in existing]
+        next_num = max(existing_nums) + 1 if existing_nums else 1
+
+        await state.update_data(
+            series_id=series_id,
+            series_title=series.title,
+            content_type=series.content_type,
+        )
         await state.set_state(EpisodeForm.episode_number)
+
+        hint = ""
+        if existing_nums:
+            hint = f"\nMavjud qismlar: <b>{', '.join(str(n) for n in sorted(existing_nums))}</b>"
+
         if callback.message:
             type_uz = "serialiga" if series.content_type == "series" else "animesiga"
             await callback.message.edit_text(
-                f"<b>{escape_html(series.title)}</b> {type_uz} qism qo'shish.\n"
-                "Qism raqamini yuboring:"
+                f"📺 <b>{escape_html(series.title)}</b> {type_uz} qism qo'shish.{hint}\n\n"
+                f"Qism raqamini yuboring (keyingisi: <b>{next_num}</b>):"
             )
 
+    # Qadam 4 (oxirgi): Qism raqami kiritiladi — saqlash
     @router.message(EpisodeForm.episode_number)
-    async def episode_number(message: Message, state: FSMContext) -> None:
+    async def episode_receive_number(message: Message, state: FSMContext) -> None:
         if not is_admin(message.from_user.id, settings):
             return
         try:
@@ -858,77 +898,52 @@ def register_admin_handlers(
             if number < 1:
                 raise ValueError
         except ValueError:
-            await message.answer("Musbat butun qism raqamini yuboring.")
+            await message.answer("⚠️ Musbat butun son yuboring. Masalan: 1, 2, 3...")
             return
-        await state.update_data(episode_number=number)
-        await state.set_state(EpisodeForm.title)
-        await message.answer("Qism nomini yuboring:")
 
-    @router.message(EpisodeForm.title)
-    async def episode_title(message: Message, state: FSMContext) -> None:
-        if not is_admin(message.from_user.id, settings):
-            return
-        title = (message.text or "").strip()
-        if not title:
-            await message.answer("Qism nomi bo'sh bo'lishi mumkin emas.")
-            return
-        await state.update_data(title=title)
-        await state.set_state(EpisodeForm.description)
-        await message.answer("Tavsif yuboring yoki <code>skip</code> deb yozing:")
-
-    @router.message(EpisodeForm.description)
-    async def episode_description(message: Message, state: FSMContext) -> None:
-        if not is_admin(message.from_user.id, settings):
-            return
-        await state.update_data(description=optional_text(message.text))
-        await state.set_state(EpisodeForm.file_id)
-        await message.answer("Bu qismning Telegram file ID sini yuboring:")
-
-    @router.message(EpisodeForm.file_id)
-    async def episode_file_id(message: Message, state: FSMContext) -> None:
-        if not is_admin(message.from_user.id, settings):
-            return
-        file_id = (message.text or "").strip()
-        if len(file_id) < 10:
-            await message.answer("File ID juda qisqa. To'liq file ID ni yuboring.")
-            return
-        await state.update_data(file_id=file_id)
-        await state.set_state(EpisodeForm.media_type)
-        await message.answer(
-            "Media turini yuboring: <code>video</code>, <code>document</code> yoki <code>audio</code>."
-        )
-
-    @router.message(EpisodeForm.media_type)
-    async def episode_media_type(message: Message, state: FSMContext) -> None:
-        if not is_admin(message.from_user.id, settings):
-            return
-        media_type = normalise_media_type(message.text)
-        if media_type is None:
-            await message.answer("Faqat video, document yoki audio dan birini yuboring.")
-            return
         data = await state.get_data()
+        series_title = data["series_title"]
+        # Nom avtomatik generatsiya qilinadi
+        auto_title = f"{series_title} — {number}-qism"
+
         try:
             episode_id = await database.add_episode(
                 series_id=data["series_id"],
-                episode_number=data["episode_number"],
-                title=data["title"],
-                description=data["description"],
+                episode_number=number,
+                title=auto_title,
+                description="",
                 file_id=data["file_id"],
-                media_type=media_type,
+                media_type=data["media_type"],
             )
         except Exception as error:
             if "UNIQUE constraint failed" in str(error):
                 await message.answer(
-                    "Bu serialda ushbu qism raqami allaqachon mavjud. "
-                    "Bekor qilib, boshqa raqam tanlang."
+                    f"⚠️ <b>{escape_html(series_title)}</b> da {number}-qism allaqachon mavjud.\n"
+                    "Boshqa raqam yuboring:"
                 )
                 return
             raise
+
         await state.clear()
+        content_type = data.get("content_type", "series")
+        type_uz = "serial" if content_type == "series" else "anime"
         await message.answer(
-            f"✅ Qism qo'shildi (ID: <code>{episode_id}</code>).",
+            f"✅ <b>{escape_html(series_title)}</b> {type_uz}iga "
+            f"<b>{number}-qism</b> muvaffaqiyatli qo'shildi!",
             reply_markup=admin_menu(),
         )
+
+    # Eski callback handlerlar (agar qolgan bo'lsa)
+    @router.callback_query(F.data.startswith("admin:ep_type:"))
+    async def choose_episode_content_type_legacy(callback: CallbackQuery, state: FSMContext) -> None:
+        """Eski oqim uchun fallback — hozir ishlatilmaydi."""
+        if not is_admin(callback.from_user.id, settings):
+            return
+        await safe_answer(callback)
+        if callback.message:
+            await callback.message.edit_text(
+                "Iltimos, \"➕ Qism qo'shish\" tugmasini bosib, videoni yuboring."
+            )
 
     @router.message(F.text == CATALOG_STATS_BUTTON)
     async def catalog_stats(message: Message) -> None:

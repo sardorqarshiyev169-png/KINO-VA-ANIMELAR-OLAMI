@@ -231,6 +231,19 @@ class Database:
         )
         return [self._content_from_row(row) for row in await cursor.fetchall()]
 
+    async def list_all_series_and_animes(self) -> list[CatalogItem]:
+        """Serial va animeni birga qaytaradi — qism qo'shish oqimi uchun."""
+        cursor = await self._db().execute(
+            """
+            SELECT id, content_type, title, description, year, genre, file_id, media_type
+            FROM contents
+            WHERE content_type IN ('series', 'anime')
+            ORDER BY content_type, title COLLATE NOCASE
+            LIMIT 500
+            """
+        )
+        return [self._content_from_row(row) for row in await cursor.fetchall()]
+
     async def get_content(self, content_id: int) -> CatalogItem | None:
         cursor = await self._db().execute(
             """
