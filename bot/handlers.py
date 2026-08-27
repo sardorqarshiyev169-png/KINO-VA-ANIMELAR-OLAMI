@@ -41,6 +41,7 @@ from bot.keyboards import (
     episode_keyboard,
     mandatory_channels_menu,
     pagination_keyboard,
+    episode_content_type_picker,
     series_picker,
     subscription_menu,
     user_menu,
@@ -359,7 +360,8 @@ async def show_content(
     if content.description:
         details.append(f"\n{escape_html(content.description)}")
 
-    if content.content_type == "series":
+    is_series_like = content.content_type == "series" or (content.content_type == "anime" and not content.file_id)
+    if is_series_like:
         episodes = await database.list_episodes(content.id)
         if not episodes:
             details.append("\n\nQismlar tez orada qo'shiladi.")
@@ -369,6 +371,7 @@ async def show_content(
             "\n".join(details),
             reply_markup=episode_keyboard(
                 [(episode.id, episode.episode_number, episode.title) for episode in episodes],
+                content_type=content.content_type,
             ),
         )
     else:
@@ -612,7 +615,7 @@ def register_admin_handlers(
             return
         data = await state.get_data()
         genre = optional_text(message.text)
-        if data["content_type"] == "series":
+        if data["content_type"] in ("series", "anime"):
             content_id = await database.add_content(
                 content_type=data["content_type"],
                 title=data["title"],
@@ -623,8 +626,9 @@ def register_admin_handlers(
                 media_type=None,
             )
             await state.clear()
+            content_type_uz = "serial" if data["content_type"] == "series" else "anime"
             await message.answer(
-                f"✅ <b>{escape_html(data['title'])}</b> serial sifatida qo'shildi "
+                f"✅ <b>{escape_html(data['title'])}</b> {content_type_uz} sifatida qo'shildi "
                 f"(ID: <code>{content_id}</code>).",
                 reply_markup=admin_menu(),
             )
@@ -698,19 +702,35 @@ def register_admin_handlers(
     async def start_episode_form(message: Message, state: FSMContext) -> None:
         if not is_admin(message.from_user.id, settings):
             return
-        series = await database.list_series()
-        if not series:
-            await message.answer(
-                "Qism qo'shishdan oldin kamida bitta serial qo'shing.",
-                reply_markup=admin_menu(),
-            )
-            return
         await state.clear()
-        await state.set_state(EpisodeForm.choose_series)
         await message.answer(
-            "Bu qism tegishli bo'lgan serialni tanlang:",
-            reply_markup=series_picker([(item.id, item.title) for item in series]),
+            "Qaysi bo'limga qism qo'shasiz?",
+            reply_markup=episode_content_type_picker(),
         )
+
+    @router.callback_query(F.data.startswith("admin:ep_type:"))
+    async def choose_episode_content_type(callback: CallbackQuery, state: FSMContext) -> None:
+        if not is_admin(callback.from_user.id, settings):
+            return
+        await safe_answer(callback)
+        content_type = callback.data.split(":")[-1]
+        
+        series = await database.list_admin_contents(content_type)
+        
+        if not series:
+            type_uz = "serial" if content_type == "series" else "anime"
+            if callback.message:
+                await callback.message.edit_text(
+                    f"Qism qo'shishdan oldin kamida bitta {type_uz} qo'shing."
+                )
+            return
+
+        await state.set_state(EpisodeForm.choose_series)
+        if callback.message:
+            await callback.message.edit_text(
+                "Bu qism tegishli bo'lgan nomni tanlang:",
+                reply_markup=series_picker([(item.id, item.title) for item in series]),
+            )
 
     @router.callback_query(F.data.startswith("admin:episode_series:"))
     async def choose_episode_series(callback: CallbackQuery, state: FSMContext) -> None:
@@ -719,15 +739,16 @@ def register_admin_handlers(
         await safe_answer(callback)
         series_id = int(callback.data.rsplit(":", 1)[1])
         series = await database.get_content(series_id)
-        if not series or series.content_type != "series":
+        if not series or series.content_type not in ("series", "anime"):
             if callback.message:
-                await callback.message.answer("Bu serial endi mavjud emas.")
+                await callback.message.answer("Bu serial yoki anime endi mavjud emas.")
             return
         await state.update_data(series_id=series_id, series_title=series.title)
         await state.set_state(EpisodeForm.episode_number)
         if callback.message:
+            type_uz = "serialiga" if series.content_type == "series" else "animesiga"
             await callback.message.edit_text(
-                f"<b>{escape_html(series.title)}</b> serialiga qism qo'shish.\n"
+                f"<b>{escape_html(series.title)}</b> {type_uz} qism qo'shish.\n"
                 "Qism raqamini yuboring:"
             )
 

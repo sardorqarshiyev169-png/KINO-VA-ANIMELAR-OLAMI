@@ -218,9 +218,18 @@ class Database:
         count_row = await count_cursor.fetchone()
         return [self._content_from_row(row) for row in rows], int(count_row["count"])
 
-    async def list_series(self) -> list[CatalogItem]:
-        items, _ = await self.list_contents("series", limit=500)
-        return items
+    async def list_admin_contents(self, content_type: str) -> list[CatalogItem]:
+        cursor = await self._db().execute(
+            """
+            SELECT id, content_type, title, description, year, genre, file_id, media_type
+            FROM contents
+            WHERE content_type = ?
+            ORDER BY title COLLATE NOCASE
+            LIMIT 500
+            """,
+            (content_type,)
+        )
+        return [self._content_from_row(row) for row in await cursor.fetchall()]
 
     async def get_content(self, content_id: int) -> CatalogItem | None:
         cursor = await self._db().execute(

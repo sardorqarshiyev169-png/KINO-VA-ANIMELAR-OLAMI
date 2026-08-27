@@ -130,7 +130,7 @@ def content_detail_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def episode_keyboard(episodes: list[tuple[int, int, str]]) -> InlineKeyboardMarkup:
+def episode_keyboard(episodes: list[tuple[int, int, str]], content_type: str = "series") -> InlineKeyboardMarkup:
     rows = [
         [
             InlineKeyboardButton(
@@ -142,10 +142,21 @@ def episode_keyboard(episodes: list[tuple[int, int, str]]) -> InlineKeyboardMark
     ]
     rows.extend(
         [
-            [InlineKeyboardButton(text="‹ Ro'yxatga qaytish", callback_data="category:series:0")],
+            [InlineKeyboardButton(text="‹ Ro'yxatga qaytish", callback_data=f"category:{content_type}:0")],
             [InlineKeyboardButton(text="🏠 Asosiy menyu", callback_data="home")],
         ]
     )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def episode_content_type_picker() -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(text="📺 Seriallar", callback_data="admin:ep_type:series"),
+            InlineKeyboardButton(text="🍥 Animelar", callback_data="admin:ep_type:anime"),
+        ],
+        [InlineKeyboardButton(text=CANCEL_BUTTON, callback_data="admin:cancel")],
+    ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
