@@ -403,6 +403,15 @@ def register_admin_handlers(
         await state.clear()
         await message.answer("Amal bekor qilindi.", reply_markup=admin_menu())
 
+    @router.message(Command("clean_animes"))
+    async def clean_animes_command(message: Message) -> None:
+        if not is_admin(message.from_user.id, settings):
+            return
+        cursor = await database._db().execute("DELETE FROM contents WHERE content_type='anime'")
+        count = cursor.rowcount
+        await database._db().commit()
+        await message.answer(f"✅ {count} ta eski animelar server bazasidan tozalandi!")
+
     @router.message(F.text == ADMIN_PANEL_BUTTON)
     async def admin_panel_button(message: Message, state: FSMContext) -> None:
         if not is_admin(message.from_user.id, settings):
