@@ -38,6 +38,8 @@ from bot.keyboards import (
     admin_menu,
     admin_menu_inline,
     mandatory_channels_inline,
+    admin_manage_inline,
+    admin_delete_menu,
     content_detail_keyboard,
     content_detail_with_delete_keyboard,
     channel_delete_menu,
@@ -52,14 +54,21 @@ from bot.keyboards import (
     subscription_menu,
     user_menu,
 )
-from bot.states import ChannelForm, ContentForm, EpisodeForm, SearchForm
+from bot.states import ChannelForm, ContentForm, EpisodeForm, SearchForm, AdminForm
 
 logger = logging.getLogger(__name__)
+
+
+ADMIN_IDS: set[int] = set()
 
 
 def register_routers(
     dispatcher: Dispatcher, database: Database, settings: Settings
 ) -> None:
+    global ADMIN_IDS
+    ADMIN_IDS = set(database.admin_ids)
+    ADMIN_IDS.add(settings.admin_id)
+
     admin_router = Router(name="admin")
     user_router = Router(name="users")
     register_admin_handlers(admin_router, database, settings)
@@ -69,6 +78,12 @@ def register_routers(
 
 
 def is_admin(user_id: int | None, settings: Settings) -> bool:
+    if user_id is None:
+        return False
+    return user_id in ADMIN_IDS
+
+
+def is_owner(user_id: int | None, settings: Settings) -> bool:
     return user_id == settings.admin_id
 
 
@@ -485,14 +500,18 @@ def register_admin_handlers(
             await message.answer("Bu buyruq faqat administrator uchun.")
             return
         await state.clear()
+        is_owner_user = is_owner(message.from_user.id, settings)
         await message.answer(
-            "⚙️ <b>Admin panel</b>\nAmalni tanlang:", reply_markup=admin_menu_inline()
+            "⚙️ <b>Admin panel</b>\nAmalni tanlang:", reply_markup=admin_menu_inline(is_owner=is_owner_user)
         )
 
-    @router.message(F.from_user.id == settings.admin_id, F.text == CANCEL_BUTTON)
+    @router.message(F.text == CANCEL_BUTTON)
     async def cancel_form(message: Message, state: FSMContext) -> None:
+        if not is_admin(message.from_user.id, settings):
+            return
         await state.clear()
-        await message.answer("Amal bekor qilindi.", reply_markup=admin_menu_inline())
+        is_owner_user = is_owner(message.from_user.id, settings)
+        await message.answer("Amal bekor qilindi.", reply_markup=admin_menu_inline(is_owner=is_owner_user))
 
     @router.message(Command("clean_animes"))
     async def clean_animes_command(message: Message) -> None:
@@ -508,8 +527,9 @@ def register_admin_handlers(
         if not is_admin(message.from_user.id, settings):
             return
         await state.clear()
+        is_owner_user = is_owner(message.from_user.id, settings)
         await message.answer(
-            "⚙️ <b>Admin panel</b>\nAmalni tanlang:", reply_markup=admin_menu_inline()
+            "⚙️ <b>Admin panel</b>\nAmalni tanlang:", reply_markup=admin_menu_inline(is_owner=is_owner_user)
         )
 
     @router.message(F.text == MANDATORY_MEMBERSHIP_BUTTON)
@@ -529,8 +549,9 @@ def register_admin_handlers(
         if not is_admin(message.from_user.id, settings):
             return
         await state.clear()
+        is_owner_user = is_owner(message.from_user.id, settings)
         await message.answer(
-            "⚙️ <b>Admin panel</b>\nAmalni tanlang:", reply_markup=admin_menu_inline()
+            "⚙️ <b>Admin panel</b>\nAmalni tanlang:", reply_markup=admin_menu_inline(is_owner=is_owner_user)
         )
 
     @router.message(F.text == ADD_CHANNEL_BUTTON)
@@ -785,7 +806,7 @@ def register_admin_handlers(
             await message.answer(
                 f"✅ <b>{escape_html(data['title'])}</b> {content_type_uz} sifatida qo'shildi "
                 f"(ID: <code>{content_id}</code>).",
-                reply_markup=admin_menu_inline(),
+                reply_markup=admin_menu_inline(is_owner=is_owner(message.from_user.id, settings)),
             )
             return
         await state.update_data(genre=genre)
@@ -825,7 +846,7 @@ def register_admin_handlers(
         await message.answer(
             f"✅ <b>{escape_html(data['title'])}</b> qo'shildi "
             f"(ID: <code>{content_id}</code>).",
-            reply_markup=admin_menu_inline(),
+            reply_markup=admin_menu_inline(is_owner=is_owner(message.from_user.id, settings)),
         )
 
     @router.message(ContentForm.media_type)
@@ -850,7 +871,7 @@ def register_admin_handlers(
         await message.answer(
             f"✅ <b>{escape_html(data['title'])}</b> qo'shildi "
             f"(ID: <code>{content_id}</code>).",
-            reply_markup=admin_menu_inline(),
+            reply_markup=admin_menu_inline(is_owner=is_owner(message.from_user.id, settings)),
         )
 
     # ===== QISM QO'SHISH — YANGI SODDALASHTIRILGAN OQIM =====
@@ -896,7 +917,7 @@ def register_admin_handlers(
             await message.answer(
                 "⚠️ Hali hech qanday serial yoki anime qo'shilmagan.\n"
                 "Avval serial yoki anime nomini qo'shing.",
-                reply_markup=admin_menu_inline(),
+                reply_markup=admin_menu_inline(is_owner=is_owner(message.from_user.id, settings)),
             )
             return
 
@@ -987,7 +1008,7 @@ def register_admin_handlers(
         await message.answer(
             f"✅ <b>{escape_html(series_title)}</b> {type_uz}iga "
             f"<b>{number}-qism</b> muvaffaqiyatli qo'shildi!",
-            reply_markup=admin_menu_inline(),
+            reply_markup=admin_menu_inline(is_owner=is_owner(message.from_user.id, settings)),
         )
 
     # Eski callback handlerlar (agar qolgan bo'lsa)
@@ -1014,7 +1035,7 @@ def register_admin_handlers(
             f"🍥 Animelar: <b>{stats['anime']}</b>\n"
             f"🧩 Qismlar: <b>{stats['episodes']}</b>\n"
             f"👥 Foydalanuvchilar: <b>{stats['users']}</b>",
-            reply_markup=admin_menu_inline(),
+            reply_markup=admin_menu_inline(is_owner=is_owner(message.from_user.id, settings)),
         )
 
     @router.callback_query(F.data == "admin:cancel")
@@ -1024,13 +1045,14 @@ def register_admin_handlers(
         await safe_answer(callback)
         await state.clear()
         if callback.message:
+            is_owner_user = is_owner(callback.from_user.id, settings)
             try:
                 await callback.message.edit_text(
                     "Amal bekor qilindi.\n\n⚙️ <b>Admin panel</b>\nAmalni tanlang:",
-                    reply_markup=admin_menu_inline(),
+                    reply_markup=admin_menu_inline(is_owner=is_owner_user),
                 )
             except TelegramBadRequest:
-                await callback.message.answer("Admin panel:", reply_markup=admin_menu_inline())
+                await callback.message.answer("Admin panel:", reply_markup=admin_menu_inline(is_owner=is_owner_user))
 
     @router.callback_query(F.data.startswith("admin:action:"))
     async def admin_action_callback(callback: CallbackQuery, state: FSMContext) -> None:
@@ -1083,14 +1105,145 @@ def register_admin_handlers(
             await callback.message.edit_text(text, reply_markup=back_kb)
         elif action == "back_to_admin":
             await state.clear()
+            is_owner_user = is_owner(callback.from_user.id, settings)
             await callback.message.edit_text(
                 "⚙️ <b>Admin panel</b>\nAmalni tanlang:",
-                reply_markup=admin_menu_inline()
+                reply_markup=admin_menu_inline(is_owner=is_owner_user)
+            )
+        elif action == "manage_admins":
+            if not is_owner(callback.from_user.id, settings):
+                await callback.answer("Bu amal faqat bot egasi uchun ruxsat etilgan.", show_alert=True)
+                return
+            await state.clear()
+            await callback.message.edit_text(
+                "👥 <b>Adminlarni boshqarish</b>\nAmalni tanlang:",
+                reply_markup=admin_manage_inline(),
             )
         elif action == "close":
             await state.clear()
             if callback.message:
                 await callback.message.delete()
+
+    @router.callback_query(F.data == "admin:manage:list")
+    async def list_admins_callback(callback: CallbackQuery) -> None:
+        if not is_owner(callback.from_user.id, settings):
+            await callback.answer("Faqat bot egasi bu amalni bajarishi mumkin.", show_alert=True)
+            return
+        await safe_answer(callback)
+        admins = await database.list_admins()
+        lines = [
+            "👑 <b>Asosiy bot egasi:</b>",
+            f"• ID: <code>{settings.admin_id}</code>\n",
+            "👥 <b>Qo'shimcha adminlar:</b>"
+        ]
+        if admins:
+            for idx, adm in enumerate(admins, start=1):
+                usr = f" (@{adm['username']})" if adm['username'] else ""
+                lines.append(
+                    f"{idx}. <b>{escape_html(adm['first_name'])}</b>{usr}\n"
+                    f"   ID: <code>{adm['telegram_id']}</code>"
+                )
+        else:
+            lines.append("<i>Qo'shimcha adminlar belgilanmagan.</i>")
+
+        back_kb = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Orqaga", callback_data="admin:action:manage_admins")]]
+        )
+        await callback.message.edit_text("\n".join(lines), reply_markup=back_kb)
+
+    @router.callback_query(F.data == "admin:manage:add")
+    async def add_admin_callback(callback: CallbackQuery, state: FSMContext) -> None:
+        if not is_owner(callback.from_user.id, settings):
+            await callback.answer("Faqat bot egasi admin qo'sha oladi.", show_alert=True)
+            return
+        await safe_answer(callback)
+        await state.clear()
+        await state.set_state(AdminForm.telegram_id)
+        await callback.message.answer(
+            "👤 <b>Admin qo'shish (1/2)</b>\n\nYangi adminning Telegram ID raqamini yuboring:",
+            reply_markup=cancel_keyboard(),
+        )
+
+    @router.callback_query(F.data == "admin:manage:delete")
+    async def delete_admin_picker_callback(callback: CallbackQuery) -> None:
+        if not is_owner(callback.from_user.id, settings):
+            await callback.answer("Faqat bot egasi adminlarni o'chira oladi.", show_alert=True)
+            return
+        await safe_answer(callback)
+        admins = await database.list_admins()
+        if not admins:
+            back_kb = InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(text="⬅️ Orqaga", callback_data="admin:action:manage_admins")]]
+            )
+            await callback.message.edit_text("O'chirish uchun qo'shimcha adminlar mavjud emas.", reply_markup=back_kb)
+            return
+        await callback.message.edit_text(
+            "O'chirish uchun adminni tanlang:",
+            reply_markup=admin_delete_menu([(a["telegram_id"], a["first_name"]) for a in admins]),
+        )
+
+    @router.callback_query(F.data.startswith("admin:delete_admin:"))
+    async def delete_admin_callback(callback: CallbackQuery, state: FSMContext) -> None:
+        if not is_owner(callback.from_user.id, settings):
+            await callback.answer("Faqat bot egasi adminlarni o'chira oladi.", show_alert=True)
+            return
+        await safe_answer(callback)
+        target_id = int(callback.data.rsplit(":", 1)[1])
+        deleted = await database.remove_admin(target_id)
+        if deleted:
+            global ADMIN_IDS
+            ADMIN_IDS.discard(target_id)
+        await state.clear()
+        if callback.message:
+            await callback.message.edit_text(
+                "✅ Admin o'chirildi." if deleted else "Bu admin topilmadi."
+            )
+            await callback.message.answer(
+                "👥 Adminlarni boshqarish bo'limi:", reply_markup=admin_manage_inline()
+            )
+
+    @router.message(AdminForm.telegram_id)
+    async def add_admin_id_step(message: Message, state: FSMContext) -> None:
+        if not is_owner(message.from_user.id, settings):
+            return
+        text = (message.text or "").strip()
+        try:
+            telegram_id = int(text)
+            if telegram_id <= 0:
+                raise ValueError
+        except ValueError:
+            await message.answer("⚠️ Iltimos, Telegram ID sifatida musbat butun son yuboring.")
+            return
+        
+        if telegram_id == settings.admin_id or telegram_id in ADMIN_IDS:
+            await message.answer("⚠️ Ushbu foydalanuvchi allaqachon admin hisoblanadi.")
+            return
+        
+        await state.update_data(telegram_id=telegram_id)
+        await state.set_state(AdminForm.first_name)
+        await message.answer("👤 <b>Admin qo'shish (2/2)</b>\n\nYangi adminning ismini (first name) yuboring:")
+
+    @router.message(AdminForm.first_name)
+    async def add_admin_name_step(message: Message, state: FSMContext) -> None:
+        if not is_owner(message.from_user.id, settings):
+            return
+        name = (message.text or "").strip()
+        if not name:
+            await message.answer("⚠️ Admin ismi bo'sh bo'lishi mumkin emas.")
+            return
+        
+        data = await state.get_data()
+        telegram_id = data["telegram_id"]
+        
+        await database.add_admin(telegram_id=telegram_id, username=None, first_name=name)
+        global ADMIN_IDS
+        ADMIN_IDS.add(telegram_id)
+        
+        await state.clear()
+        await message.answer(
+            f"✅ Yangi admin <b>{escape_html(name)}</b> (ID: <code>{telegram_id}</code>) muvaffaqiyatli qo'shildi!",
+            reply_markup=admin_manage_inline(),
+        )
 
 
 def cancel_keyboard():

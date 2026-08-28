@@ -306,26 +306,29 @@ def channel_delete_menu(items: list[tuple[int, str]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def admin_menu_inline() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="➕ Kino qo'shish", callback_data="admin:action:add_movie"),
-                InlineKeyboardButton(text="➕ Serial qo'shish", callback_data="admin:action:add_series"),
-            ],
-            [
-                InlineKeyboardButton(text="➕ Anime qo'shish", callback_data="admin:action:add_anime"),
-                InlineKeyboardButton(text="➕ Qism qo'shish", callback_data="admin:action:add_episode"),
-            ],
-            [
-                InlineKeyboardButton(text="📢 Majburiy a'zolik", callback_data="admin:action:mandatory_membership"),
-                InlineKeyboardButton(text="📊 Statistika", callback_data="admin:action:stats"),
-            ],
-            [
-                InlineKeyboardButton(text="❌ Yopish", callback_data="admin:action:close")
-            ]
+def admin_menu_inline(is_owner: bool = False) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(text="➕ Kino qo'shish", callback_data="admin:action:add_movie"),
+            InlineKeyboardButton(text="➕ Serial qo'shish", callback_data="admin:action:add_series"),
+        ],
+        [
+            InlineKeyboardButton(text="➕ Anime qo'shish", callback_data="admin:action:add_anime"),
+            InlineKeyboardButton(text="➕ Qism qo'shish", callback_data="admin:action:add_episode"),
+        ],
+        [
+            InlineKeyboardButton(text="📢 Majburiy a'zolik", callback_data="admin:action:mandatory_membership"),
+            InlineKeyboardButton(text="📊 Statistika", callback_data="admin:action:stats"),
         ]
-    )
+    ]
+    if is_owner:
+        rows.append([
+            InlineKeyboardButton(text="👥 Adminlarni boshqarish", callback_data="admin:action:manage_admins")
+        ])
+    rows.append([
+        InlineKeyboardButton(text="❌ Yopish", callback_data="admin:action:close")
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def mandatory_channels_inline() -> InlineKeyboardMarkup:
@@ -343,3 +346,34 @@ def mandatory_channels_inline() -> InlineKeyboardMarkup:
             ]
         ]
     )
+
+
+def admin_manage_inline() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="➕ Admin qo'shish", callback_data="admin:manage:add"),
+                InlineKeyboardButton(text="📋 Adminlar ro'yxati", callback_data="admin:manage:list"),
+            ],
+            [
+                InlineKeyboardButton(text="🗑 Adminni o'chirish", callback_data="admin:manage:delete"),
+            ],
+            [
+                InlineKeyboardButton(text="⬅️ Orqaga", callback_data="admin:action:back_to_admin"),
+            ]
+        ]
+    )
+
+
+def admin_delete_menu(items: list[tuple[int, str]]) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"🗑 {name}",
+                callback_data=f"admin:delete_admin:{telegram_id}",
+            )
+        ]
+        for telegram_id, name in items
+    ]
+    rows.append([InlineKeyboardButton(text=CANCEL_BUTTON, callback_data="admin:cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)

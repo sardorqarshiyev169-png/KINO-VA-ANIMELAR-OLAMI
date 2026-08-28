@@ -42,6 +42,7 @@ class Database:
     def __init__(self, path: Path) -> None:
         self.path = path
         self._connection: aiosqlite.Connection | None = None
+        self.admin_ids: set[int] = set()
 
     async def initialize(
         self, legacy_channel: tuple[str, str, str] | None = None
@@ -99,9 +100,22 @@ class Database:
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS admins (
+                telegram_id INTEGER PRIMARY KEY,
+                username TEXT,
+                first_name TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
             """
         )
         await self._connection.commit()
+
+        # Load extra admin IDs from database
+        cursor = await self._connection.execute("SELECT telegram_id FROM admins")
+        rows = await cursor.fetchall()
+        self.admin_ids = {int(row["telegram_id"]) for row in rows}
+
         if legacy_channel:
             await self._migrate_legacy_channel(legacy_channel)
 
@@ -364,6 +378,45 @@ class Database:
         )
         await self._db().commit()
         return cursor.rowcount > 0
+
+    async def add_admin(
+        self, telegram_id: int, username: str | None, first_name: str
+    ) -> None:
+        await self._db().execute(
+            """
+            INSERT OR REPLACE INTO admins (telegram_id, username, first_name)
+            VALUES (?, ?, ?)
+            """,
+            (telegram_id, username, first_name),
+        )
+        await self._db().commit()
+        self.admin_ids.add(telegram_id)
+
+    async def remove_admin(self, telegram_id: int) -> bool:
+        cursor = await self._db().execute(
+            "DELETE FROM admins WHERE telegram_id = ?", (telegram_id,)
+        )
+        await self._db().commit()
+        if cursor.rowcount > 0:
+            self.admin_ids.discard(telegram_id)
+            return True
+        return False
+
+    async def list_admins(self) -> list[dict[str, Any]]:
+        cursor = await self._db().execute(
+            """
+            SELECT telegram_id, username, first_name, created_at
+            FROM admins
+            ORDER BY first_name COLLATE NOCASE
+            """
+        )
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+    def is_admin(self, telegram_id: int) -> bool:
+        return telegram_id in self.admin_ids
+
+
 
     @staticmethod
     def _content_from_row(row: aiosqlite.Row) -> CatalogItem:

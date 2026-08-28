@@ -24,3 +24,8 @@ class ChannelForm(StatesGroup):
     channel_id = State()
     name = State()
     url = State()
+
+
+class AdminForm(StatesGroup):
+    telegram_id = State()
+    first_name = State()
