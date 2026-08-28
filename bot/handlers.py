@@ -36,6 +36,8 @@ from bot.keyboards import (
     SEARCH_BUTTON,
     SERIES_BUTTON,
     admin_menu,
+    admin_menu_inline,
+    mandatory_channels_inline,
     content_detail_keyboard,
     content_detail_with_delete_keyboard,
     channel_delete_menu,
@@ -484,13 +486,13 @@ def register_admin_handlers(
             return
         await state.clear()
         await message.answer(
-            "⚙️ <b>Admin panel</b>\nAmalni tanlang:", reply_markup=admin_menu()
+            "⚙️ <b>Admin panel</b>\nAmalni tanlang:", reply_markup=admin_menu_inline()
         )
 
     @router.message(F.from_user.id == settings.admin_id, F.text == CANCEL_BUTTON)
     async def cancel_form(message: Message, state: FSMContext) -> None:
         await state.clear()
-        await message.answer("Amal bekor qilindi.", reply_markup=admin_menu())
+        await message.answer("Amal bekor qilindi.", reply_markup=admin_menu_inline())
 
     @router.message(Command("clean_animes"))
     async def clean_animes_command(message: Message) -> None:
@@ -507,7 +509,7 @@ def register_admin_handlers(
             return
         await state.clear()
         await message.answer(
-            "⚙️ <b>Admin panel</b>\nAmalni tanlang:", reply_markup=admin_menu()
+            "⚙️ <b>Admin panel</b>\nAmalni tanlang:", reply_markup=admin_menu_inline()
         )
 
     @router.message(F.text == MANDATORY_MEMBERSHIP_BUTTON)
@@ -519,7 +521,7 @@ def register_admin_handlers(
         await state.clear()
         await message.answer(
             "📢 <b>Majburiy a'zolik</b>\nAmalni tanlang:",
-            reply_markup=mandatory_channels_menu(),
+            reply_markup=mandatory_channels_inline(),
         )
 
     @router.message(F.text == BACK_ADMIN_BUTTON)
@@ -528,7 +530,7 @@ def register_admin_handlers(
             return
         await state.clear()
         await message.answer(
-            "⚙️ <b>Admin panel</b>\nAmalni tanlang:", reply_markup=admin_menu()
+            "⚙️ <b>Admin panel</b>\nAmalni tanlang:", reply_markup=admin_menu_inline()
         )
 
     @router.message(F.text == ADD_CHANNEL_BUTTON)
@@ -589,14 +591,14 @@ def register_admin_handlers(
             await state.clear()
             await message.answer(
                 "Bu kanal allaqachon majburiy kanallar ro'yxatida.",
-                reply_markup=mandatory_channels_menu(),
+                reply_markup=mandatory_channels_inline(),
             )
             return
         await state.clear()
         await message.answer(
             f"✅ <b>{escape_html(data['name'])}</b> majburiy kanal sifatida qo'shildi.\n"
             f"ID: <code>{channel_db_id}</code>",
-            reply_markup=mandatory_channels_menu(),
+            reply_markup=mandatory_channels_inline(),
         )
 
     @router.message(F.text == LIST_CHANNELS_BUTTON)
@@ -608,7 +610,7 @@ def register_admin_handlers(
         if not channels:
             await message.answer(
                 "📭 Majburiy kanallar ro'yxati bo'sh.",
-                reply_markup=mandatory_channels_menu(),
+                reply_markup=mandatory_channels_inline(),
             )
             return
         lines = ["📋 <b>Majburiy kanallar ro'yxati</b>\n"]
@@ -619,7 +621,7 @@ def register_admin_handlers(
                 f"   Havola: {escape_html(channel.url)}"
             )
         await message.answer(
-            "\n\n".join(lines), reply_markup=mandatory_channels_menu()
+            "\n\n".join(lines), reply_markup=mandatory_channels_inline()
         )
 
     @router.message(F.text == DELETE_CHANNEL_BUTTON)
@@ -631,10 +633,65 @@ def register_admin_handlers(
         if not channels:
             await message.answer(
                 "O'chirish uchun majburiy kanal mavjud emas.",
-                reply_markup=mandatory_channels_menu(),
+                reply_markup=mandatory_channels_inline(),
             )
             return
         await message.answer(
+            "O'chirish uchun kanalni tanlang:",
+            reply_markup=channel_delete_menu(
+                [(channel.id, channel.name) for channel in channels]
+            ),
+        )
+
+    @router.callback_query(F.data == "admin:channels:add")
+    async def start_channel_form_callback(callback: CallbackQuery, state: FSMContext) -> None:
+        if not is_admin(callback.from_user.id, settings):
+            return
+        await safe_answer(callback)
+        await state.clear()
+        await state.set_state(ChannelForm.channel_id)
+        await callback.message.answer(
+            "1/3. Kanal username yoki Telegram channel ID sini yuboring.\n"
+            "Masalan: <code>@kanal_username</code> yoki <code>-1001234567890</code>.",
+            reply_markup=cancel_keyboard(),
+        )
+
+    @router.callback_query(F.data == "admin:channels:list")
+    async def list_channels_callback(callback: CallbackQuery) -> None:
+        if not is_admin(callback.from_user.id, settings):
+            return
+        await safe_answer(callback)
+        channels = await database.list_mandatory_channels()
+        if not channels:
+            text = "📭 Majburiy kanallar ro'yxati bo'sh."
+        else:
+            lines = ["📋 <b>Majburiy kanallar ro'yxati</b>\n"]
+            for number, channel in enumerate(channels, start=1):
+                lines.append(
+                    f"{number}. <b>{escape_html(channel.name)}</b>\n"
+                    f"   ID: <code>{escape_html(channel.channel_id)}</code>\n"
+                    f"   Havola: {escape_html(channel.url)}"
+                )
+            text = "\n\n".join(lines)
+        
+        back_kb = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Orqaga", callback_data="admin:action:mandatory_membership")]]
+        )
+        await callback.message.edit_text(text, reply_markup=back_kb)
+
+    @router.callback_query(F.data == "admin:channels:delete")
+    async def delete_channel_picker_callback(callback: CallbackQuery) -> None:
+        if not is_admin(callback.from_user.id, settings):
+            return
+        await safe_answer(callback)
+        channels = await database.list_mandatory_channels()
+        if not channels:
+            back_kb = InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(text="⬅️ Orqaga", callback_data="admin:action:mandatory_membership")]]
+            )
+            await callback.message.edit_text("O'chirish uchun majburiy kanal mavjud emas.", reply_markup=back_kb)
+            return
+        await callback.message.edit_text(
             "O'chirish uchun kanalni tanlang:",
             reply_markup=channel_delete_menu(
                 [(channel.id, channel.name) for channel in channels]
@@ -656,7 +713,7 @@ def register_admin_handlers(
                 "✅ Kanal o'chirildi." if deleted else "Bu kanal topilmadi."
             )
             await callback.message.answer(
-                "Majburiy a'zolik bo'limi:", reply_markup=mandatory_channels_menu()
+                "Majburiy a'zolik bo'limi:", reply_markup=mandatory_channels_inline()
             )
 
     @router.message(
@@ -728,7 +785,7 @@ def register_admin_handlers(
             await message.answer(
                 f"✅ <b>{escape_html(data['title'])}</b> {content_type_uz} sifatida qo'shildi "
                 f"(ID: <code>{content_id}</code>).",
-                reply_markup=admin_menu(),
+                reply_markup=admin_menu_inline(),
             )
             return
         await state.update_data(genre=genre)
@@ -768,7 +825,7 @@ def register_admin_handlers(
         await message.answer(
             f"✅ <b>{escape_html(data['title'])}</b> qo'shildi "
             f"(ID: <code>{content_id}</code>).",
-            reply_markup=admin_menu(),
+            reply_markup=admin_menu_inline(),
         )
 
     @router.message(ContentForm.media_type)
@@ -793,7 +850,7 @@ def register_admin_handlers(
         await message.answer(
             f"✅ <b>{escape_html(data['title'])}</b> qo'shildi "
             f"(ID: <code>{content_id}</code>).",
-            reply_markup=admin_menu(),
+            reply_markup=admin_menu_inline(),
         )
 
     # ===== QISM QO'SHISH — YANGI SODDALASHTIRILGAN OQIM =====
@@ -839,7 +896,7 @@ def register_admin_handlers(
             await message.answer(
                 "⚠️ Hali hech qanday serial yoki anime qo'shilmagan.\n"
                 "Avval serial yoki anime nomini qo'shing.",
-                reply_markup=admin_menu(),
+                reply_markup=admin_menu_inline(),
             )
             return
 
@@ -930,7 +987,7 @@ def register_admin_handlers(
         await message.answer(
             f"✅ <b>{escape_html(series_title)}</b> {type_uz}iga "
             f"<b>{number}-qism</b> muvaffaqiyatli qo'shildi!",
-            reply_markup=admin_menu(),
+            reply_markup=admin_menu_inline(),
         )
 
     # Eski callback handlerlar (agar qolgan bo'lsa)
@@ -957,7 +1014,7 @@ def register_admin_handlers(
             f"🍥 Animelar: <b>{stats['anime']}</b>\n"
             f"🧩 Qismlar: <b>{stats['episodes']}</b>\n"
             f"👥 Foydalanuvchilar: <b>{stats['users']}</b>",
-            reply_markup=admin_menu(),
+            reply_markup=admin_menu_inline(),
         )
 
     @router.callback_query(F.data == "admin:cancel")
@@ -967,8 +1024,73 @@ def register_admin_handlers(
         await safe_answer(callback)
         await state.clear()
         if callback.message:
-            await callback.message.edit_text("Amal bekor qilindi.")
-            await callback.message.answer("Admin panel:", reply_markup=admin_menu())
+            try:
+                await callback.message.edit_text(
+                    "Amal bekor qilindi.\n\n⚙️ <b>Admin panel</b>\nAmalni tanlang:",
+                    reply_markup=admin_menu_inline(),
+                )
+            except TelegramBadRequest:
+                await callback.message.answer("Admin panel:", reply_markup=admin_menu_inline())
+
+    @router.callback_query(F.data.startswith("admin:action:"))
+    async def admin_action_callback(callback: CallbackQuery, state: FSMContext) -> None:
+        if not is_admin(callback.from_user.id, settings):
+            return
+        await safe_answer(callback)
+        action = callback.data.split(":", 2)[2]
+        
+        if action.startswith("add_"):
+            content_type = action.split("_", 1)[1] # movie, series, anime
+            await state.clear()
+            await state.update_data(content_type=content_type)
+            await state.set_state(ContentForm.title)
+            type_uz = {
+                "movie": "Kino",
+                "series": "Serial",
+                "anime": "Anime"
+            }.get(content_type, "Kontent")
+            await callback.message.answer(
+                f"➕ <b>{type_uz} qo'shish</b>\n\nNomini yuboring:",
+                reply_markup=cancel_keyboard()
+            )
+        elif action == "add_episode":
+            await state.clear()
+            await state.set_state(EpisodeForm.file)
+            await callback.message.answer(
+                "📹 <b>Qism qo'shish</b>\n\n"
+                "Videoni yuboring yoki boshqa kanaldan forward qiling.",
+                reply_markup=cancel_keyboard(),
+            )
+        elif action == "mandatory_membership":
+            await state.clear()
+            await callback.message.edit_text(
+                "📢 <b>Majburiy a'zolik</b>\nAmalni tanlang:",
+                reply_markup=mandatory_channels_inline(),
+            )
+        elif action == "stats":
+            stats = await database.stats()
+            text = (
+                "📊 <b>Katalog statistikasi</b>\n\n"
+                f"🎬 Kinolar: <b>{stats['movies']}</b>\n"
+                f"📺 Seriallar: <b>{stats['series']}</b>\n"
+                f"🍥 Animelar: <b>{stats['anime']}</b>\n"
+                f"🧩 Qismlar: <b>{stats['episodes']}</b>\n"
+                f"👥 Foydalanuvchilar: <b>{stats['users']}</b>"
+            )
+            back_kb = InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(text="⬅️ Orqaga", callback_data="admin:action:back_to_admin")]]
+            )
+            await callback.message.edit_text(text, reply_markup=back_kb)
+        elif action == "back_to_admin":
+            await state.clear()
+            await callback.message.edit_text(
+                "⚙️ <b>Admin panel</b>\nAmalni tanlang:",
+                reply_markup=admin_menu_inline()
+            )
+        elif action == "close":
+            await state.clear()
+            if callback.message:
+                await callback.message.delete()
 
 
 def cancel_keyboard():

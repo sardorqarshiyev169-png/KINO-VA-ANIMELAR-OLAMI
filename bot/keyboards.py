@@ -304,3 +304,42 @@ def channel_delete_menu(items: list[tuple[int, str]]) -> InlineKeyboardMarkup:
     ]
     rows.append([InlineKeyboardButton(text=CANCEL_BUTTON, callback_data="admin:cancel")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_menu_inline() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="➕ Kino qo'shish", callback_data="admin:action:add_movie"),
+                InlineKeyboardButton(text="➕ Serial qo'shish", callback_data="admin:action:add_series"),
+            ],
+            [
+                InlineKeyboardButton(text="➕ Anime qo'shish", callback_data="admin:action:add_anime"),
+                InlineKeyboardButton(text="➕ Qism qo'shish", callback_data="admin:action:add_episode"),
+            ],
+            [
+                InlineKeyboardButton(text="📢 Majburiy a'zolik", callback_data="admin:action:mandatory_membership"),
+                InlineKeyboardButton(text="📊 Statistika", callback_data="admin:action:stats"),
+            ],
+            [
+                InlineKeyboardButton(text="❌ Yopish", callback_data="admin:action:close")
+            ]
+        ]
+    )
+
+
+def mandatory_channels_inline() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="➕ Kanal qo'shish", callback_data="admin:channels:add"),
+                InlineKeyboardButton(text="📋 Kanallar ro'yxati", callback_data="admin:channels:list"),
+            ],
+            [
+                InlineKeyboardButton(text="🗑 Kanalni o'chirish", callback_data="admin:channels:delete"),
+            ],
+            [
+                InlineKeyboardButton(text="⬅️ Orqaga", callback_data="admin:action:back_to_admin"),
+            ]
+        ]
+    )
