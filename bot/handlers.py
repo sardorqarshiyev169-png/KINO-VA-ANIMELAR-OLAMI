@@ -874,46 +874,16 @@ def register_admin_handlers(
             reply_markup=admin_menu_inline(is_owner=is_owner(message.from_user.id, settings)),
         )
 
-    # ===== QISM QO'SHISH — YANGI SODDALASHTIRILGAN OQIM =====
-    # Qadam 1: Admin "➕ Qism qo'shish" tugmasini bosadi
+    # ===== QISM QO'SHISH =====
+    # Qadam 1: Admin "➕ Qism qo'shish" tugmasini bosadi -> Serial/anime tanlash
     @router.message(F.text == ADD_EPISODE_BUTTON)
     async def start_episode_form(message: Message, state: FSMContext) -> None:
         if not is_admin(message.from_user.id, settings):
             return
         await state.clear()
-        await state.set_state(EpisodeForm.file)
-        await message.answer(
-            "📹 <b>Qism qo'shish</b>\n\n"
-            "Videoni yuboring yoki boshqa kanaldan forward qiling.",
-            reply_markup=cancel_keyboard(),
-        )
-
-    # Qadam 2: Admin video/document yuboradi — file_id va media_type avtomatik olinadi
-    @router.message(EpisodeForm.file)
-    async def episode_receive_file(message: Message, state: FSMContext) -> None:
-        if not is_admin(message.from_user.id, settings):
-            return
-        if message.video:
-            file_id = message.video.file_id
-            media_type = "video"
-        elif message.document:
-            file_id = message.document.file_id
-            media_type = "document"
-        elif message.audio:
-            file_id = message.audio.file_id
-            media_type = "audio"
-        else:
-            await message.answer(
-                "⚠️ Video yoki fayl yuboring (yoki boshqa kanaldan forward qiling)."
-            )
-            return
-
-        await state.update_data(file_id=file_id, media_type=media_type)
-
-        # Serial va animeni birga ko'rsatish
+        
         all_contents = await database.list_all_series_and_animes()
         if not all_contents:
-            await state.clear()
             await message.answer(
                 "⚠️ Hali hech qanday serial yoki anime qo'shilmagan.\n"
                 "Avval serial yoki anime nomini qo'shing.",
@@ -923,14 +893,14 @@ def register_admin_handlers(
 
         await state.set_state(EpisodeForm.choose_series)
         await message.answer(
-            "📺 <b>Qaysi serial yoki animega tegishli?</b>\n"
+            "📺 <b>Qaysi serial yoki animega qism qo'shmoqchisiz?</b>\n"
             "Ro'yxatdan birini tanlang:",
             reply_markup=series_and_anime_picker(
                 [(item.id, item.title, item.content_type) for item in all_contents]
             ),
         )
 
-    # Qadam 3: Serial/anime tanlanadi
+    # Qadam 2: Serial/anime tanlanadi -> Qism raqamini so'rash
     @router.callback_query(F.data.startswith("admin:episode_series:"), EpisodeForm.choose_series)
     async def choose_episode_series(callback: CallbackQuery, state: FSMContext) -> None:
         if not is_admin(callback.from_user.id, settings):
@@ -961,12 +931,14 @@ def register_admin_handlers(
 
         if callback.message:
             type_uz = "serialiga" if series.content_type == "series" else "animesiga"
-            await callback.message.edit_text(
+            await callback.message.delete()
+            await callback.message.answer(
                 f"📺 <b>{escape_html(series.title)}</b> {type_uz} qism qo'shish.{hint}\n\n"
-                f"Qism raqamini yuboring (keyingisi: <b>{next_num}</b>):"
+                f"Qism raqamini yuboring (keyingisi: <b>{next_num}</b>):",
+                reply_markup=cancel_keyboard()
             )
 
-    # Qadam 4 (oxirgi): Qism raqami kiritiladi — saqlash
+    # Qadam 3: Qism raqami kiritiladi -> Video so'rash
     @router.message(EpisodeForm.episode_number)
     async def episode_receive_number(message: Message, state: FSMContext) -> None:
         if not is_admin(message.from_user.id, settings):
@@ -980,7 +952,49 @@ def register_admin_handlers(
             return
 
         data = await state.get_data()
+        
+        # Check if episode already exists
+        series_id = data["series_id"]
+        existing = await database.list_episodes(series_id)
+        if any(ep.episode_number == number for ep in existing):
+            await message.answer(
+                f"⚠️ Bu qism allaqachon mavjud.\n"
+                "Boshqa raqam yuboring:"
+            )
+            return
+
+        await state.update_data(episode_number=number)
+        await state.set_state(EpisodeForm.file)
+        
+        await message.answer(
+            f"Endi <b>{number}-qism</b> uchun videoni yuboring yoki boshqa kanaldan forward qiling.",
+            reply_markup=cancel_keyboard()
+        )
+
+    # Qadam 4 (oxirgi): Video yuboriladi -> Saqlash
+    @router.message(EpisodeForm.file)
+    async def episode_receive_file(message: Message, state: FSMContext) -> None:
+        if not is_admin(message.from_user.id, settings):
+            return
+        if message.video:
+            file_id = message.video.file_id
+            media_type = "video"
+        elif message.document:
+            file_id = message.document.file_id
+            media_type = "document"
+        elif message.audio:
+            file_id = message.audio.file_id
+            media_type = "audio"
+        else:
+            await message.answer(
+                "⚠️ Video yoki fayl yuboring (yoki boshqa kanaldan forward qiling)."
+            )
+            return
+
+        data = await state.get_data()
         series_title = data["series_title"]
+        number = data["episode_number"]
+        
         # Nom avtomatik generatsiya qilinadi
         auto_title = f"{series_title} — {number}-qism"
 
@@ -990,14 +1004,14 @@ def register_admin_handlers(
                 episode_number=number,
                 title=auto_title,
                 description="",
-                file_id=data["file_id"],
-                media_type=data["media_type"],
+                file_id=file_id,
+                media_type=media_type,
             )
         except Exception as error:
             if "UNIQUE constraint failed" in str(error):
                 await message.answer(
                     f"⚠️ <b>{escape_html(series_title)}</b> da {number}-qism allaqachon mavjud.\n"
-                    "Boshqa raqam yuboring:"
+                    "O'zgartirish uchun avvalgisini o'chirishingiz kerak."
                 )
                 return
             raise
@@ -1061,7 +1075,7 @@ def register_admin_handlers(
         await safe_answer(callback)
         action = callback.data.split(":", 2)[2]
         
-        if action.startswith("add_"):
+        if action in ("add_movie", "add_series", "add_anime"):
             content_type = action.split("_", 1)[1] # movie, series, anime
             await state.clear()
             await state.update_data(content_type=content_type)
@@ -1077,12 +1091,21 @@ def register_admin_handlers(
             )
         elif action == "add_episode":
             await state.clear()
-            await state.set_state(EpisodeForm.file)
-            await callback.message.answer(
-                "📹 <b>Qism qo'shish</b>\n\n"
-                "Videoni yuboring yoki boshqa kanaldan forward qiling.",
-                reply_markup=cancel_keyboard(),
-            )
+            all_contents = await database.list_all_series_and_animes()
+            if not all_contents:
+                await callback.message.answer(
+                    "⚠️ Hali hech qanday serial yoki anime qo'shilmagan.\n"
+                    "Avval serial yoki anime nomini qo'shing."
+                )
+            else:
+                await state.set_state(EpisodeForm.choose_series)
+                await callback.message.answer(
+                    "📺 <b>Qaysi serial yoki animega qism qo'shmoqchisiz?</b>\n"
+                    "Ro'yxatdan birini tanlang:",
+                    reply_markup=series_and_anime_picker(
+                        [(item.id, item.title, item.content_type) for item in all_contents]
+                    ),
+                )
         elif action == "mandatory_membership":
             await state.clear()
             await callback.message.edit_text(
