@@ -107,6 +107,12 @@ class Database:
                 first_name TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS promotions (
+                chat_id INTEGER PRIMARY KEY,
+                count INTEGER NOT NULL DEFAULT 1,
+                last_sent_date TEXT NOT NULL DEFAULT CURRENT_DATE
+            );
             """
         )
         await self._connection.commit()
@@ -335,7 +341,9 @@ class Database:
                 (SELECT COUNT(*) FROM contents WHERE content_type = 'series') AS series,
                 (SELECT COUNT(*) FROM contents WHERE content_type = 'anime') AS anime,
                 (SELECT COUNT(*) FROM episodes) AS episodes,
-                (SELECT COUNT(*) FROM users) AS users
+                (SELECT COUNT(*) FROM users) AS users,
+                (SELECT COUNT(*) FROM users WHERE date(updated_at) = date('now')) AS active_today,
+                (SELECT COUNT(*) FROM users WHERE date(updated_at) >= date('now', '-30 days')) AS active_month
             """
         )
         row = await cursor.fetchone()
@@ -415,6 +423,35 @@ class Database:
 
     def is_admin(self, telegram_id: int) -> bool:
         return telegram_id in self.admin_ids
+
+    async def can_send_promotion(self, chat_id: int) -> bool:
+        cursor = await self._db().execute(
+            "SELECT count, last_sent_date, date('now', 'localtime') as today FROM promotions WHERE chat_id = ?",
+            (chat_id,)
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return True
+        
+        if row["count"] >= 6:
+            return False
+        if row["last_sent_date"] == row["today"]:
+            return False
+            
+        return True
+
+    async def record_promotion(self, chat_id: int) -> None:
+        await self._db().execute(
+            """
+            INSERT INTO promotions (chat_id, count, last_sent_date)
+            VALUES (?, 1, date('now', 'localtime'))
+            ON CONFLICT(chat_id) DO UPDATE SET
+                count = count + 1,
+                last_sent_date = date('now', 'localtime')
+            """,
+            (chat_id,)
+        )
+        await self._db().commit()
 
 
 

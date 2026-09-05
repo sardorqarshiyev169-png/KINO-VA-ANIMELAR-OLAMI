@@ -14,6 +14,8 @@ from database import (
     delete_movie,
     delete_anime,
     get_users_count,
+    get_users_today_count,
+    get_users_month_count,
     get_all_user_ids,
     count_movies,
     count_animes,
@@ -48,13 +50,17 @@ async def admin_back(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "admin_stats")
 async def admin_stats(callback: CallbackQuery):
     users = await get_users_count()
+    users_today = await get_users_today_count()
+    users_month = await get_users_month_count()
     movies = await count_movies()
     animes = await count_animes()
     text = (
         f"📊 Statistika:\n\n"
-        f"👥 Foydalanuvchilar soni: {users}\n"
         f"🎬 Kinolar soni: {movies}\n"
-        f"🎭 Animelar soni: {animes}"
+        f"🎭 Animelar soni: {animes}\n\n"
+        f"👥 Umumiy foydalanuvchilar: {users}\n"
+        f"🟢 Bugun qo'shilganlar: {users_today}\n"
+        f"🔵 Oxirgi 1 oyda qo'shilganlar: {users_month}"
     )
     await callback.message.edit_text(text, reply_markup=back_kb())
 

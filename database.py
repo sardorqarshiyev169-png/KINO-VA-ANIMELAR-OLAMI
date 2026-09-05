@@ -58,6 +58,18 @@ async def get_users_count() -> int:
         row = await cursor.fetchone()
         return row[0] if row else 0
 
+async def get_users_today_count() -> int:
+    async with aiosqlite.connect(DB_NAME) as db:
+        cursor = await db.execute("SELECT COUNT(*) FROM users WHERE date(joined_at) = date('now')")
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
+async def get_users_month_count() -> int:
+    async with aiosqlite.connect(DB_NAME) as db:
+        cursor = await db.execute("SELECT COUNT(*) FROM users WHERE date(joined_at) >= date('now', '-30 days')")
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
 
 async def get_all_user_ids() -> list[int]:
     async with aiosqlite.connect(DB_NAME) as db:

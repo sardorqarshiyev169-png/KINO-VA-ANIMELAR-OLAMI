@@ -11,6 +11,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     CallbackQuery,
+    ChatMemberUpdated,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
@@ -404,6 +405,27 @@ def register_user_handlers(
             f"🔎 Results for <b>{escape_html(query)}</b>:",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
+
+    @router.my_chat_member()
+    async def bot_added_to_chat(event: ChatMemberUpdated, bot: Bot) -> None:
+        if event.new_chat_member.status in (ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR) \
+           and event.old_chat_member.status not in (ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR):
+            
+            chat = event.chat
+            if chat.type in ("group", "supergroup", "channel"):
+                if await database.can_send_promotion(chat.id):
+                    try:
+                        bot_info = await bot.get_me()
+                        text = (
+                            f"👋 Salom! Men <b>{bot_info.first_name}</b> man!\n\n"
+                            "Men orqali siz eng sara kino, serial va animelarni topib tomosha qilishingiz mumkin. "
+                            "Guruh yoki kanalingizda men orqali qulay qidiruv tizimidan foydalaning!\n\n"
+                            f"👉 <a href='https://t.me/{bot_info.username}'>Botga o'tish</a>"
+                        )
+                        await bot.send_message(chat.id, text, disable_web_page_preview=True)
+                        await database.record_promotion(chat.id)
+                    except Exception as e:
+                        logger.error("Failed to send promotion to %s: %s", chat.id, e)
 
 
 async def send_category(
@@ -1047,8 +1069,10 @@ def register_admin_handlers(
             f"🎬 Kinolar: <b>{stats['movies']}</b>\n"
             f"📺 Seriallar: <b>{stats['series']}</b>\n"
             f"🍥 Animelar: <b>{stats['anime']}</b>\n"
-            f"🧩 Qismlar: <b>{stats['episodes']}</b>\n"
-            f"👥 Foydalanuvchilar: <b>{stats['users']}</b>",
+            f"🧩 Qismlar: <b>{stats['episodes']}</b>\n\n"
+            f"👥 Umumiy foydalanuvchilar: <b>{stats['users']}</b>\n"
+            f"🟢 Bugun faol: <b>{stats['active_today']}</b>\n"
+            f"🔵 Oxirgi 1 oyda faol: <b>{stats['active_month']}</b>",
             reply_markup=admin_menu_inline(is_owner=is_owner(message.from_user.id, settings)),
         )
 
@@ -1119,8 +1143,10 @@ def register_admin_handlers(
                 f"🎬 Kinolar: <b>{stats['movies']}</b>\n"
                 f"📺 Seriallar: <b>{stats['series']}</b>\n"
                 f"🍥 Animelar: <b>{stats['anime']}</b>\n"
-                f"🧩 Qismlar: <b>{stats['episodes']}</b>\n"
-                f"👥 Foydalanuvchilar: <b>{stats['users']}</b>"
+                f"🧩 Qismlar: <b>{stats['episodes']}</b>\n\n"
+                f"👥 Umumiy foydalanuvchilar: <b>{stats['users']}</b>\n"
+                f"🟢 Bugun faol: <b>{stats['active_today']}</b>\n"
+                f"🔵 Oxirgi 1 oyda faol: <b>{stats['active_month']}</b>"
             )
             back_kb = InlineKeyboardMarkup(
                 inline_keyboard=[[InlineKeyboardButton(text="⬅️ Orqaga", callback_data="admin:action:back_to_admin")]]
