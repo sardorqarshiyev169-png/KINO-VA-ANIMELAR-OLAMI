@@ -55,7 +55,7 @@ from bot.keyboards import (
     subscription_menu,
     user_menu,
 )
-from bot.states import ChannelForm, ContentForm, EpisodeForm, SearchForm, AdminForm
+from bot.states import ChannelForm, ContentForm, EpisodeForm, SearchForm, AdminForm, BroadcastForm
 
 logger = logging.getLogger(__name__)
 
@@ -1136,6 +1136,13 @@ def register_admin_handlers(
                 "📢 <b>Majburiy a'zolik</b>\nAmalni tanlang:",
                 reply_markup=mandatory_channels_inline(),
             )
+        elif action == "broadcast":
+            await state.clear()
+            await state.set_state(BroadcastForm.message)
+            await callback.message.answer(
+                "📢 <b>Xabarnoma yuborish</b>\n\nFoydalanuvchilarga yubormoqchi bo'lgan xabaringizni yuboring (matn, rasm, video va h.k.):",
+                reply_markup=cancel_keyboard()
+            )
         elif action == "stats":
             stats = await database.stats()
             text = (
@@ -1292,6 +1299,40 @@ def register_admin_handlers(
         await message.answer(
             f"✅ Yangi admin <b>{escape_html(name)}</b> (ID: <code>{telegram_id}</code>) muvaffaqiyatli qo'shildi!",
             reply_markup=admin_manage_inline(),
+        )
+
+    @router.message(BroadcastForm.message)
+    async def broadcast_message_step(message: Message, state: FSMContext, bot: Bot) -> None:
+        import asyncio
+        if not is_admin(message.from_user.id, settings):
+            return
+        
+        await state.clear()
+        is_owner_user = is_owner(message.from_user.id, settings)
+        
+        users = await database.get_all_users()
+        if not users:
+            await message.answer("Bazada foydalanuvchilar yo'q.", reply_markup=admin_menu_inline(is_owner=is_owner_user))
+            return
+            
+        success_count = 0
+        fail_count = 0
+        
+        await message.answer(f"⏳ Xabarnoma yuborish boshlandi... Jami foydalanuvchilar: {len(users)}")
+        
+        for user_id in users:
+            try:
+                await message.copy_to(user_id)
+                success_count += 1
+            except Exception:
+                fail_count += 1
+            await asyncio.sleep(0.05)
+                
+        await message.answer(
+            f"✅ <b>Xabarnoma yuborish yakunlandi.</b>\n\n"
+            f"Jami yuborildi: {success_count}\n"
+            f"Yuborilmadi (bloklagan): {fail_count}",
+            reply_markup=admin_menu_inline(is_owner=is_owner_user)
         )
 
 
