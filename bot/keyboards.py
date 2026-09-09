@@ -319,6 +319,9 @@ def admin_menu_inline(is_owner: bool = False) -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(text="📢 Majburiy a'zolik", callback_data="admin:action:mandatory_membership"),
             InlineKeyboardButton(text="📊 Statistika", callback_data="admin:action:stats"),
+        ],
+        [
+            InlineKeyboardButton(text="📢 Xabarnoma yuborish", callback_data="admin:action:broadcast"),
         ]
     ]
     if is_owner:

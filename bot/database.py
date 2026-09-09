@@ -421,6 +421,11 @@ class Database:
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
 
+    async def get_all_users(self) -> list[int]:
+        cursor = await self._db().execute("SELECT telegram_id FROM users")
+        rows = await cursor.fetchall()
+        return [int(row["telegram_id"]) for row in rows]
+
     def is_admin(self, telegram_id: int) -> bool:
         return telegram_id in self.admin_ids
 

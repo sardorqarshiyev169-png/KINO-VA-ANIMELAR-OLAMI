@@ -29,3 +29,6 @@ class ChannelForm(StatesGroup):
 class AdminForm(StatesGroup):
     telegram_id = State()
     first_name = State()
+
+class BroadcastForm(StatesGroup):
+    message = State()
