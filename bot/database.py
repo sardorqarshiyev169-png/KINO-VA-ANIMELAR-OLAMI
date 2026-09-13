@@ -486,24 +486,45 @@ class Database:
         )
 
     async def import_database(self, other_db_path: Path) -> int:
+        import aiosqlite
+        
+        contents_added = 0
+        async with aiosqlite.connect(other_db_path) as other_db:
+            other_db.row_factory = aiosqlite.Row
+            
+            # Get contents from other DB
+            async with other_db.execute("SELECT id, content_type, title, description, year, genre, file_id, media_type FROM contents") as cursor:
+                contents = await cursor.fetchall()
+                
+            # Get episodes from other DB
+            async with other_db.execute("SELECT id, series_id, episode_number, title, file_id, media_type FROM episodes") as cursor:
+                episodes = await cursor.fetchall()
+                
+        # Insert into main DB
         db = self._db()
-        await db.execute("ATTACH DATABASE ? AS other", (str(other_db_path),))
-        
-        cursor = await db.execute(
-            """
-            INSERT OR IGNORE INTO contents (id, content_type, title, description, year, genre, file_id, media_type)
-            SELECT id, content_type, title, description, year, genre, file_id, media_type FROM other.contents
-            """
-        )
-        contents_added = cursor.rowcount
-        
-        await db.execute(
-            """
-            INSERT OR IGNORE INTO episodes (id, series_id, episode_number, title, file_id, media_type)
-            SELECT id, series_id, episode_number, title, file_id, media_type FROM other.episodes
-            """
-        )
-        
-        await db.execute("DETACH DATABASE other")
+        for row in contents:
+            try:
+                await db.execute(
+                    """
+                    INSERT OR IGNORE INTO contents (id, content_type, title, description, year, genre, file_id, media_type)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (row["id"], row["content_type"], row["title"], row["description"], row["year"], row["genre"], row["file_id"], row["media_type"])
+                )
+            except Exception:
+                pass
+                
+        for row in episodes:
+            try:
+                await db.execute(
+                    """
+                    INSERT OR IGNORE INTO episodes (id, series_id, episode_number, title, file_id, media_type)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (row["id"], row["series_id"], row["episode_number"], row["title"], row["file_id"], row["media_type"])
+                )
+            except Exception:
+                pass
+                
         await db.commit()
-        return contents_added
+        return len(contents)
