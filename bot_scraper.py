@@ -89,10 +89,8 @@ async def scrape_bot(start_code=1, end_code=10):
                         copied = await message.copy(DUMP_CHANNEL_ID, caption=description) # Yangi toza caption bilan yuklaymiz!
                         file_id = ""
                         
-                        if copied.video:
-                            file_id = copied.video.file_id
-                        elif copied.document:
-                            file_id = copied.document.file_id
+                        if copied.video or copied.document:
+                            file_id = str(copied.id)  # Save the message ID!
                             
                         if file_id:
                             # 5. Bazaga kiritish (kutish bilan)

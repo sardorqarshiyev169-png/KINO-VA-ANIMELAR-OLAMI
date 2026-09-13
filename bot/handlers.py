@@ -1401,12 +1401,27 @@ def cancel_keyboard():
 async def send_media(
     bot: Bot, chat_id: int, file_id: str, media_type: str, caption: str
 ) -> None:
-    if media_type == "video":
-        await bot.send_video(chat_id, video=file_id, caption=caption)
-    elif media_type == "audio":
-        await bot.send_audio(chat_id, audio=file_id, caption=caption)
-    else:
-        await bot.send_document(chat_id, document=file_id, caption=caption)
+    try:
+        if file_id.isdigit():
+            # If file_id is numeric, it is a message_id from the dump channel.
+            await bot.copy_message(
+                chat_id=chat_id,
+                from_chat_id="-1006363224227",
+                message_id=int(file_id),
+                caption=caption
+            )
+            return
+
+        if media_type == "video":
+            await bot.send_video(chat_id, video=file_id, caption=caption)
+        elif media_type == "audio":
+            await bot.send_audio(chat_id, audio=file_id, caption=caption)
+        else:
+            await bot.send_document(chat_id, document=file_id, caption=caption)
+    except Exception as e:
+        import logging
+        logging.error(f"Error sending media: {e}")
+        await bot.send_message(chat_id, "Kechirasiz, ushbu kinoni yuborishda xatolik yuz berdi. Iltimos, adminga murojaat qiling.")
 
 
 def optional_text(value: str | None) -> str:
