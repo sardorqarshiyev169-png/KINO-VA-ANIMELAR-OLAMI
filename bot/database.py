@@ -484,3 +484,26 @@ class Database:
             file_id=str(row["file_id"]),
             media_type=str(row["media_type"]),
         )
+
+    async def import_database(self, other_db_path: Path) -> int:
+        db = self._db()
+        await db.execute("ATTACH DATABASE ? AS other", (str(other_db_path),))
+        
+        cursor = await db.execute(
+            """
+            INSERT OR IGNORE INTO contents (id, content_type, title, description, year, genre, file_id, media_type)
+            SELECT id, content_type, title, description, year, genre, file_id, media_type FROM other.contents
+            """
+        )
+        contents_added = cursor.rowcount
+        
+        await db.execute(
+            """
+            INSERT OR IGNORE INTO episodes (id, series_id, episode_number, title, file_id, media_type)
+            SELECT id, series_id, episode_number, title, file_id, media_type FROM other.episodes
+            """
+        )
+        
+        await db.execute("DETACH DATABASE other")
+        await db.commit()
+        return contents_added

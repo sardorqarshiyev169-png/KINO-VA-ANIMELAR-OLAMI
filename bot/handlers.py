@@ -527,6 +527,59 @@ def register_admin_handlers(
             "⚙️ <b>Admin panel</b>\nAmalni tanlang:", reply_markup=admin_menu_inline(is_owner=is_owner_user)
         )
 
+    @router.message(Command("import_db"))
+    async def import_db_command(message: Message, bot: Bot) -> None:
+        if not is_admin(message.from_user.id, settings):
+            return
+            
+        if not message.document or not message.document.file_name.endswith(".sqlite3"):
+            await message.answer("Iltimos, kompyuteringizdagi movies.sqlite3 faylini yuborib, caption'ga /import_db deb yozing.")
+            return
+            
+        await message.answer("⏳ Baza birlashtirilmoqda, kuting...")
+        import os
+        from pathlib import Path
+        
+        file_id = message.document.file_id
+        temp_path = Path(f"data/temp_{message.from_user.id}.sqlite3")
+        
+        try:
+            file = await bot.get_file(file_id)
+            await bot.download_file(file.file_path, temp_path)
+            
+            added = await database.import_database(temp_path)
+            
+            await message.answer(f"✅ Baza muvaffaqiyatli birlashtirildi!\nJami {added} ta yangi kino qo'shildi.")
+        except Exception as e:
+            await message.answer(f"❌ Xatolik yuz berdi: {e}")
+        finally:
+            if temp_path.exists():
+                os.remove(temp_path)
+
+    @router.message(Command("scrape"))
+    async def scrape_command(message: Message, state: FSMContext) -> None:
+        if not is_admin(message.from_user.id, settings):
+            return
+            
+        args = message.text.split()
+        if len(args) != 3:
+            await message.answer("⚠️ Format xato! To'g'ri yozilishi:\n`/scrape [bosh_kod] [oxirgi_kod]`\nMasalan: `/scrape 50 100`")
+            return
+            
+        start_code = args[1]
+        end_code = args[2]
+        
+        if not start_code.isdigit() or not end_code.isdigit():
+            await message.answer("Kino kodlari faqat raqam bo'lishi kerak!")
+            return
+            
+        import subprocess
+        
+        await message.answer(f"🚀 O'g'irlash jarayoni boshlandi!\nBoshlang'ich kod: {start_code}\nOxirgi kod: {end_code}\n\nJarayon orqa fonda ishlamoqda. Terminal orqali kuzatishingiz mumkin.")
+        
+        # Subprocess orqali orqa fonda ishga tushirish (bloklanmasligi uchun)
+        subprocess.Popen(["python", "bot_scraper.py", start_code, end_code])
+
     @router.message(F.text == CANCEL_BUTTON)
     async def cancel_form(message: Message, state: FSMContext) -> None:
         if not is_admin(message.from_user.id, settings):
