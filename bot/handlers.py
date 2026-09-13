@@ -1406,7 +1406,7 @@ async def send_media(
             # If file_id is numeric, it is a message_id from the dump channel.
             await bot.copy_message(
                 chat_id=chat_id,
-                from_chat_id="-1006363224227",
+                from_chat_id="-1004410963880",
                 message_id=int(file_id),
                 caption=caption
             )
